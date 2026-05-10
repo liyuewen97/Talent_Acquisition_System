@@ -48,6 +48,8 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
   };
 
   const skillsText = Array.isArray(result?.skills) ? result.skills.join("、") : result?.skills || "";
+  const llmUsed = Boolean(result?.llmUsed);
+  const llmError = typeof result?.llmError === "string" ? result.llmError : "";
 
   return (
     <section className="page-stack">
@@ -123,6 +125,20 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
               <input type="hidden" name="viewerId" value={viewerId} />
               <input type="hidden" name="viewerRole" value={viewerRole} />
               <input type="hidden" name="status" value="NEW" />
+
+              <article className="card">
+                <div className="section-header">
+                  <h2>解析状态</h2>
+                  <p className="muted">
+                    {llmUsed ? "DeepSeek 已生效：当前草稿来自 AI 深度解析。" : "DeepSeek 未生效：当前草稿来自启发式解析。"}
+                  </p>
+                </div>
+                {!llmUsed && llmError ? (
+                  <div style={{ marginTop: 12, padding: 12, backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, color: "#9a3412" }}>
+                    {llmError}
+                  </div>
+                ) : null}
+              </article>
 
               <article className="card">
                 <div className="section-header">

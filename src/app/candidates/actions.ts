@@ -241,19 +241,45 @@ function extractInfo(text: string) {
 }
 
 // Placeholder for LLM integration
-async function callLLM(text: string) {
+function extractFirstJsonObject(raw: string) {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return null;
+  return raw.slice(start, end + 1);
+}
+
+function safeJsonParse(raw: string) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    const extracted = extractFirstJsonObject(raw);
+    if (!extracted) return null;
+    try {
+      return JSON.parse(extracted);
+    } catch {
+      return null;
+    }
+  }
+}
+
+async function callLLM(text: string): Promise<{ ok: boolean; data?: any; error?: string }> {
   const apiKey = process.env.DEEPSEEK_API_KEY;
-  if (!apiKey) return null;
+  if (!apiKey) return { ok: false, error: "未检测到 DEEPSEEK_API_KEY" };
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
     const response = await fetch("https://api.deepseek.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${apiKey}`
       },
+      signal: controller.signal,
       body: JSON.stringify({
         model: "deepseek-chat",
+        temperature: 0.2,
         messages: [
           {
             role: "system",
@@ -279,22 +305,41 @@ async function callLLM(text: string) {
 注意事项：
 - 如果某个信息在文本中不存在，请填充为空字符串 ""。
 - 日期请尽量转换为 YYYY-MM-DD 格式。
-- 确保输出的是合法的 JSON 对象。`
+- 确保输出的是合法的 JSON 对象，且只输出 JSON（不要包含任何解释性文本）。`
           },
           {
             role: "user",
             content: `请解析以下简历文本：\n\n${text.slice(0, 6000)}`
           }
-        ],
-        response_format: { type: "json_object" }
-      })
+        ]
+      }),
     });
-    
-    const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
+
+    clearTimeout(timeout);
+
+    const raw = await response.text();
+    if (!response.ok) {
+      return {
+        ok: false,
+        error: `DeepSeek API 错误 ${response.status}: ${raw.slice(0, 200)}`,
+      };
+    }
+
+    const payload = safeJsonParse(raw);
+    const content = payload?.choices?.[0]?.message?.content;
+    if (!content || typeof content !== "string") {
+      return { ok: false, error: "DeepSeek 返回内容为空或格式异常" };
+    }
+
+    const parsed = safeJsonParse(content);
+    if (!parsed) {
+      return { ok: false, error: "DeepSeek 返回内容无法解析为 JSON" };
+    }
+
+    return { ok: true, data: parsed };
   } catch (err) {
-    console.error("LLM Error:", err);
-    return null;
+    const message = err instanceof Error ? err.message : "未知错误";
+    return { ok: false, error: `DeepSeek 调用失败: ${message}` };
   }
 }
 
@@ -330,8 +375,9 @@ export async function parseResume(formData: FormData) {
   }
 
   // 1. Try real LLM if API Key is available
-  const llmResult = await callLLM(extractedText);
-  if (llmResult) {
+  const llm = await callLLM(extractedText);
+  if (llm.ok && llm.data) {
+    const llmResult = llm.data;
     const normalized = {
       name: llmResult.name || "",
       gender: llmResult.gender || "",
@@ -348,6 +394,8 @@ export async function parseResume(formData: FormData) {
       workExperiences: Array.isArray(llmResult.workExperiences) ? llmResult.workExperiences : [],
       projects: Array.isArray(llmResult.projects) ? llmResult.projects : [],
       rawText: extractedText,
+      llmUsed: true,
+      llmError: "",
     };
 
     return normalized;
@@ -369,6 +417,8 @@ export async function parseResume(formData: FormData) {
     skills: [],
     tags: ["待分类"],
     rawText: extractedText,
+    llmUsed: false,
+    llmError: llm.error || "",
     educations: [
       {
         schoolName: info.schoolName,
