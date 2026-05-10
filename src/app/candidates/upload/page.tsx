@@ -24,6 +24,7 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
   }
 
   const backHref = `/candidates?role=${viewer.role.code}&userId=${viewer.id}`;
+  const buildSha = process.env.VERCEL_GIT_COMMIT_SHA ? process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7) : "";
 
   return (
     <main className="page-stack">
@@ -34,6 +35,7 @@ export default async function UploadPage({ searchParams }: UploadPageProps) {
           <p className="muted">
             上传 PDF 简历或直接粘贴简历文本，AI Agent 将自动为您提取结构化信息。
           </p>
+          {buildSha ? <p className="muted">Build: {buildSha}</p> : null}
         </div>
         <div className="action-row">
           <Link className="button-secondary" href={backHref}>
