@@ -7,11 +7,13 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [parseError, setParseError] = useState<string>("");
   const [result, setResult] = useState<any>(null);
 
   const handleParse = async () => {
     if (!text.trim() && !file) return;
     setIsParsing(true);
+    setParseError("");
     try {
       const formData = new FormData();
       if (file) formData.append("file", file);
@@ -20,7 +22,9 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
       const data = await parseResume(formData);
       setResult(data);
     } catch (error: any) {
-      alert(error.message || "解析失败");
+      const message = error?.message || "解析失败";
+      setParseError(message);
+      alert(message);
     } finally {
       setIsParsing(false);
     }
@@ -50,6 +54,7 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
   const skillsText = Array.isArray(result?.skills) ? result.skills.join("、") : result?.skills || "";
   const llmUsed = Boolean(result?.llmUsed);
   const llmError = typeof result?.llmError === "string" ? result.llmError : "";
+  const statusText = result ? (llmUsed ? "DeepSeek 已生效：当前草稿来自 AI 深度解析。" : "DeepSeek 未生效：当前草稿来自启发式解析。") : "尚未解析";
 
   return (
     <section className="page-stack">
@@ -57,6 +62,15 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
         <div className="section-header">
           <h2>上传与解析</h2>
           <p className="muted">支持上传 PDF / DOCX 简历或直接粘贴文本。</p>
+        </div>
+        <div style={{ marginTop: 12, padding: 12, backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 12, color: "#0f172a" }}>
+          <div style={{ fontWeight: 600 }}>解析状态</div>
+          <div className="muted" style={{ marginTop: 4 }}>{statusText}</div>
+          {parseError ? (
+            <div style={{ marginTop: 10, padding: 10, backgroundColor: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, color: "#991b1b" }}>
+              {parseError}
+            </div>
+          ) : null}
         </div>
         <div className="form-grid" style={{ marginTop: 16 }}>
           <div className="field-group form-span-2">
@@ -128,22 +142,11 @@ export function ResumeParser({ viewerId, viewerRole }: { viewerId: string; viewe
 
               <article className="card">
                 <div className="section-header">
-                  <h2>解析状态</h2>
+                  <h2>基础信息</h2>
                   <p className="muted">
                     {llmUsed ? "DeepSeek 已生效：当前草稿来自 AI 深度解析。" : "DeepSeek 未生效：当前草稿来自启发式解析。"}
+                    {!llmUsed && llmError ? `（原因：${llmError}）` : ""}
                   </p>
-                </div>
-                {!llmUsed && llmError ? (
-                  <div style={{ marginTop: 12, padding: 12, backgroundColor: "#fff7ed", border: "1px solid #fed7aa", borderRadius: 12, color: "#9a3412" }}>
-                    {llmError}
-                  </div>
-                ) : null}
-              </article>
-
-              <article className="card">
-                <div className="section-header">
-                  <h2>基础信息</h2>
-                  <p className="muted">请核对并完善 Agent 提取的信息。</p>
                 </div>
                 <div className="form-grid" style={{ marginTop: 16 }}>
                   <div className="field-group">
